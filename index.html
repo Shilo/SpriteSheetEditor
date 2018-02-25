@@ -1,0 +1,105 @@
+<style>
+input { display: block; }
+</style>
+
+<input type="file" onchange="setImage(this.files[0])" />
+<canvas id="canvas" onclick="gridClick(event.offsetX, event.offsetY)"></canvas>
+<div>Frame Width: <input id="width" type="number" /></div>
+<div>Frame Height: <input id="height" type="number" /></div>
+<input type="button" value="Update" onclick="setGrid()" />
+<div>Desired Rows: <input id="rows" type="number" /></div>
+<input type="button" value="Collapse" onclick="collapse()" />
+
+<script>
+var canvas         = document.getElementById('canvas');
+var context        = canvas.getContext('2d');
+var grid           = new Set();
+var grid_image;
+var frame_height   = 0;
+var frame_width    = 0;
+var source_image;
+
+function setImage(blob) {
+  createImageBitmap(blob).then(image => {
+    canvas.height = image.height;
+    canvas.width  = image.width;
+    context.drawImage(image, 0, 0);
+
+    source_image = context.getImageData(0, 0, canvas.width, canvas.height);
+    grid.clear();
+  });
+}
+
+function setGrid() {
+  frame_height = parseInt(document.getElementById('height').value) | 0;
+  frame_width  = parseInt(document.getElementById('width').value)  | 0;
+
+  if (frame_height == 0 || frame_width == 0)
+    return;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.beginPath();
+  for (let x = frame_width; x < canvas.width; x += frame_width) {
+    context.moveTo(0.5 + x, 0)
+    context.lineTo(0.5 + x, canvas.height);
+    context.stroke();
+  }
+  for (let y = frame_height; y < canvas.height; y += frame_height) {
+    context.moveTo(0, 0.5 + y)
+    context.lineTo(canvas.width, 0.5 + y);
+    context.stroke();
+  }
+  canvas.toBlob(blob => {createImageBitmap(blob).then(image => {
+    grid_image = image
+    drawGrid();
+  })});
+}
+
+function drawGrid() {
+  context.putImageData(source_image, 0, 0);
+  context.drawImage(grid_image, 0, 0);
+  context.fillStyle  = 'rgba(255, 0, 0, 0.3)';
+  grid.forEach(function(v) {
+    var loc = v.split(',');
+    context.fillRect(
+      parseInt(loc[0]) * frame_width,
+      parseInt(loc[1]) * frame_height, frame_width, frame_height);
+  });
+}
+
+function gridClick(x, y) {
+  var location = `${(x / frame_width) | 0},${(y / frame_height) | 0}`;
+  if (!grid.delete(location))
+    grid.add(location);
+  drawGrid();
+}
+
+function collapse() {
+  var rows =
+    parseInt(document.getElementById('rows').value) || (
+    canvas.width / frame_width ) | 0;
+
+  canvas.height = Math.ceil(grid.size / rows) * frame_height;
+  canvas.width  = rows * frame_width;
+
+  var index = 0;
+
+  grid.forEach(function(v) {
+    var loc = v.split(',');
+    var x   = parseInt(loc[0]) * frame_width;
+    var y   = parseInt(loc[1]) * frame_height;
+
+    context.putImageData(source_image,
+      ((index % rows) * frame_width)            - x,
+      (Math.floor(index / rows) * frame_height) - y,
+      x,
+      y,
+      frame_width,
+      frame_height
+    );
+    ++index;
+  });
+  frame_height = 0;
+  frame_width  = 0;
+  canvas.toBlob(blob => setImage(blob));
+}
+</script>
