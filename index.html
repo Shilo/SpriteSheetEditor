@@ -2,40 +2,33 @@
 input { display: block; }
 </style>
 
-<input type="file" onchange="setImage(this.files[0])" />
-<canvas id="canvas" onclick="gridClick(event.offsetX, event.offsetY)"></canvas>
-<div>Frame Width: <input id="width" type="number" /></div>
-<div>Frame Height: <input id="height" type="number" /></div>
-<input type="button" value="Update" onclick="setGrid()" />
-<div>Desired Rows: <input id="rows" type="number" /></div>
-<input type="button" value="Collapse" onclick="collapse()" />
-
 <script>
-var canvas         = document.getElementById('canvas');
-var context        = canvas.getContext('2d');
-var grid           = new Set();
-var grid_image;
-var frame_height   = 0;
-var frame_width    = 0;
-var source_image;
-
-function setImage(blob) {
-  createImageBitmap(blob).then(image => {
-    canvas.height = image.height;
-    canvas.width  = image.width;
-    context.drawImage(image, 0, 0);
-
-    source_image = context.getImageData(0, 0, canvas.width, canvas.height);
-    grid.clear();
-  });
+function SpriteGrid(canvas) {
+  this.canvas       = canvas;
+  this.context      = canvas.getContext('2d');
+  this.frame        = { width: 0, height: 0 };
+  this.grid         = new Set();
+  this.grid_image   = null;
+  this.source_image = null;
 }
 
-function setGrid() {
-  frame_height = parseInt(document.getElementById('height').value) | 0;
-  frame_width  = parseInt(document.getElementById('width').value)  | 0;
+SpriteGrid.prototype.setImage = function (image) {
+  this.source_image  = image;
+  this.canvas.height = image.height;
+  this.canvas.width  = image.width;
 
-  if (frame_height == 0 || frame_width == 0)
-    return;
+  this.context.drawImage(image, 0, 0);
+  this.grid.clear();
+};
+
+SpriteGrid.prototype.setFrame = function(frame_width, frame_height) {
+
+  this.frame.height = frame_height;
+  this.frame.width  = frame_width;
+
+  var canvas  = this.canvas;
+  var context = this.context;
+
   context.clearRect(0, 0, canvas.width, canvas.height);
   context.beginPath();
   for (let x = frame_width; x < canvas.width; x += frame_width) {
@@ -49,57 +42,115 @@ function setGrid() {
     context.stroke();
   }
   canvas.toBlob(blob => {createImageBitmap(blob).then(image => {
-    grid_image = image
-    drawGrid();
+    this.grid_image = image
+    this.drawFrame();
   })});
-}
+};
 
-function drawGrid() {
-  context.putImageData(source_image, 0, 0);
-  context.drawImage(grid_image, 0, 0);
-  context.fillStyle  = 'rgba(255, 0, 0, 0.3)';
-  grid.forEach(function(v) {
-    var loc = v.split(',');
-    context.fillRect(
-      parseInt(loc[0]) * frame_width,
-      parseInt(loc[1]) * frame_height, frame_width, frame_height);
+SpriteGrid.prototype.drawFrame = function () {
+  this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+  this.context.drawImage(this.source_image, 0, 0);
+  this.context.drawImage(this.grid_image, 0, 0);
+  this.context.fillStyle  = 'rgba(255, 0, 0, 0.3)';
+  var  columns            = this.getColumns();
+
+  this.grid.forEach((v) => {
+    this.context.fillRect(
+      v % columns         * this.frame.width,
+      ((v / columns) | 0) * this.frame.height,
+      this.frame.width,
+      this.frame.height );
   });
-}
+};
 
-function gridClick(x, y) {
-  var location = `${(x / frame_width) | 0},${(y / frame_height) | 0}`;
-  if (!grid.delete(location))
-    grid.add(location);
-  drawGrid();
-}
+SpriteGrid.prototype.getColumns = function() {
+  return Math.ceil(this.canvas.width / this.frame.width); 
+};
 
-function collapse() {
-  var rows =
-    parseInt(document.getElementById('rows').value) || (
-    canvas.width / frame_width ) | 0;
+SpriteGrid.prototype.toggle =
+function (x, y) {
+  if (!this.source_image)
+    return;
+  x = (x / this.frame.width)  | 0;
+  y = (y / this.frame.height) | 0;
 
-  canvas.height = Math.ceil(grid.size / rows) * frame_height;
-  canvas.width  = rows * frame_width;
+  var location = (y * this.getColumns()) + x;
 
-  var index = 0;
+  if (!this.grid.delete(location))
+    this.grid.add(location);
 
-  grid.forEach(function(v) {
-    var loc = v.split(',');
-    var x   = parseInt(loc[0]) * frame_width;
-    var y   = parseInt(loc[1]) * frame_height;
+  this.drawFrame();
+};
 
-    context.putImageData(source_image,
-      ((index % rows) * frame_width)            - x,
-      (Math.floor(index / rows) * frame_height) - y,
+SpriteGrid.prototype.collapse =
+function (column_limit = (this.canvas.width / this.frame.width) | 0) {
+
+  var columns        = this.getColumns();
+  this.canvas.height = Math.ceil(this.grid.size / column_limit) * this.frame.height;
+  this.canvas.width  = column_limit * this.frame.width;
+
+  Array.from(this.grid).sort((a, b) => a - b).forEach((v, index) => {
+
+    var x = v % columns         * this.frame.width;
+    var y = ((v / columns) | 0) * this.frame.height;
+
+    this.context.drawImage(this.source_image,
       x,
       y,
-      frame_width,
-      frame_height
+      this.frame.width,
+      this.frame.height,
+      ((index % column_limit)           * this.frame.width),
+      (Math.floor(index / column_limit) * this.frame.height),
+      this.frame.width,
+      this.frame.height
     );
-    ++index;
   });
-  frame_height = 0;
-  frame_width  = 0;
-  canvas.toBlob(blob => setImage(blob));
-}
+  var image    = new Image();
+  image.onload = () => this.setImage(image);
+  image.src    = this.canvas.toDataURL();
+};
+</script>
+
+
+<!-- Bottom is completely bad code + organization -->
+
+<input id="file_upload" type="file" />
+<canvas id="canvas"></canvas>
+<div>Frame Width:
+<input id="frame_width_input" type="number" />
+</div>
+<div>Frame Height:
+<input id="frame_height_input" type="number" />
+</div>
+<input id="frame_update" type="button" value="Update" onclick="" />
+<div>Column Limit: <input id="columns" type="number" /></div>
+<input id="frame_collapse" type="button" value="Collapse" />
+
+<script>
+(function() {
+  var canvas = document.getElementById('canvas');
+  var grid   = new SpriteGrid(canvas);
+
+  // circular references lol
+  canvas.onclick = (e) => grid.toggle(e.offsetX, e.offsetY);
+  
+  document.getElementById('file_upload').onchange = function() {
+    var image    = new Image();
+    image.onload = () => grid.setImage(image);
+    image.src    = URL.createObjectURL(this.files[0]);
+  };
+
+  document.getElementById('frame_update').onclick = () => {
+    var width =  parseInt(document.getElementById('frame_width_input').value)  | 0;
+    var height = parseInt(document.getElementById('frame_height_input').value) | 0;
+    if (width && height)
+      grid.setFrame(width, height);
+  }
+
+  document.getElementById('frame_collapse').onclick = () => {
+    var columns = parseInt(document.getElementById('columns').value) | 0;
+    if (columns) grid.collapse(columns);
+    else {       grid.collapse(); }
+  };
+})();
 </script>
