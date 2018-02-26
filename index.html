@@ -51,7 +51,7 @@ SpriteGrid.prototype.drawFrame = function () {
   this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
   this.context.drawImage(this.source_image, 0, 0);
   this.context.drawImage(this.grid_image, 0, 0);
-  this.context.fillStyle  = 'rgba(255, 0, 0, 0.3)';
+  this.context.fillStyle  = 'rgba(0, 255, 0, 0.3)';
   var  columns            = this.getColumns();
 
   this.grid.forEach((v) => {
