@@ -106,7 +106,10 @@ function (column_limit = (this.canvas.width / this.frame.width) | 0) {
     );
   });
   var image    = new Image();
-  image.onload = () => this.setImage(image);
+  image.onload = () => {
+    this.setImage(image);
+    this.drawFrame();
+  }
   image.src    = this.canvas.toDataURL();
 };
 </script>
